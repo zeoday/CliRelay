@@ -192,3 +192,14 @@ git push origin feature/amazing-feature
 
 This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
+---
+
+## 🙏 Acknowledgements & Special Thanks
+
+This project is a deeply enhanced fork built upon the excellent core logic of the open-source **CliRelay** project.
+We want to express our deepest gratitude to the original **CliRelay Open Source Community** and all its contributors!
+
+It is thanks to the solid, innovative proxy distribution foundation built by the upstream community that we were able to stand on the shoulders of giants. This allowed us to develop unique advanced management features (like API Key tracking & control) and rebuild an entirely new frontend dashboard from scratch.
+
+A huge salute to the spirit of open source! ❤️
+
