@@ -3,7 +3,6 @@ package management
 import (
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -37,18 +36,9 @@ func (h *Handler) GetDashboardSummary(c *gin.Context) {
 
 	if h.authManager != nil {
 		for _, auth := range h.authManager.List() {
-			if auth == nil {
-				continue
+			if entry := h.buildAuthFileEntry(auth); entry != nil {
+				authFileCount++
 			}
-			// Skip runtime-only entries (OAuth tokens, etc.)
-			if len(auth.Attributes) > 0 && strings.EqualFold(strings.TrimSpace(auth.Attributes["runtime_only"]), "true") {
-				continue
-			}
-			// Skip disabled/removed entries without backing file
-			if auth.Disabled && strings.TrimSpace(auth.Attributes["path"]) == "" {
-				continue
-			}
-			authFileCount++
 		}
 	}
 
