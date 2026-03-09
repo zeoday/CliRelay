@@ -24,12 +24,11 @@
 
 ---
 
-## ⚡ CliRelay (Enhanced Fork) 是什么？
+## ⚡ CliRelay 是什么？
 
-> **✨ 这是一个经过大量功能增强的魔改版本！**
-> 本项目并非原版上游，而是基于原核心逻辑进行的深度二次开发版本。我们不仅提升了后端的多渠道管理能力（支持 API Key 的 CRUD 管理、渠道分类备注、精准延迟统计 `latency_ms`、单服务启用/禁用控制、公开的用量查询接口 `/manage/` 等），还**完全从零重构了前端管理面板 [codeProxy](https://github.com/kittors/codeProxy)**——由 React 19 + Vite 7 + Tailwind CSS v4 打造的专业级后台，支持深色模式、精美的全数据监控面板和强大的导入导出配置快照管理。
+> **✨ 基于 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 的深度增强版** — 重建了生产级管理层、企业级监控体系，并搭配全新 React 管理面板。
 
-CliRelay 让你可以将 AI 编程工具（Claude Code、Gemini CLI、OpenAI Codex、Amp CLI 等）的请求**统一代理**到一个本地端点。通过 OAuth 登录或添加 API 密钥即可使用，CliRelay 自动处理路由和负载均衡：
+CliRelay 让你可以将 AI 编程工具（Claude Code、Gemini CLI、OpenAI Codex、Amp CLI、Kiro 等）的请求**统一代理**到一个端点。通过 OAuth 登录或添加 API 密钥即可使用，CliRelay 自动处理智能路由、负载均衡、故障转移和用量日志记录。
 
 ```
 ┌───────────────────────┐         ┌──────────────┐         ┌────────────────────┐
@@ -38,24 +37,117 @@ CliRelay 让你可以将 AI 编程工具（Claude Code、Gemini CLI、OpenAI Cod
 │  Claude Code          │ ──────▶ │   CliRelay   │ ──────▶ │  OpenAI / Codex    │
 │  Gemini CLI           │         │   :8317      │ ──────▶ │  Anthropic Claude  │
 │  OpenAI Codex         │         │              │ ──────▶ │  Qwen / iFlow      │
-│  Amp CLI / IDE        │         │              │ ──────▶ │  OpenRouter / ...  │
-│  其他 OAI 兼容工具     │         └──────────────┘         └────────────────────┘
+│  Amp CLI / IDE        │         │              │ ──────▶ │  Kiro / Vertex     │
+│  Kiro / 其他兼容工具   │         └──────────────┘         └────────────────────┘
 └───────────────────────┘
 ```
 
-## ✨ 魔改版核心增强特性
+## ✨ 核心特性
+
+### 🔌 多服务商代理引擎
 
 | 特性 | 说明 |
 |:-----|:-----|
-| 🔑 **增强的 API Key 管理** | 完整的 API Key CRUD 控制，支持独立备注命名，以及一键**启用/禁用**单条 Key |
-| ⏱️ **精准监控与追踪** | 增加延迟追踪 (`latency_ms`)、详细用量统计、暴露公开的查询端点机制与 `/manage/` 路由 |
-| 🖥️ **全新 React 19 面板** | **完全重构**的 [codeProxy](https://github.com/kittors/codeProxy) 前端：搭载可视化监控大屏、暗黑模式、KPI 指标与快照导入导出功能 |
-| 🔌 **多服务商生态** | OpenAI、Gemini、Claude、Codex、Qwen、iFlow、Vertex 及任何 OpenAI 兼容上游 |
-| ⚖️ **负载均衡与转移** | 智能调度的多账户轮询/填充优先，配额用尽时**自动故障转移**（Failover）至可用模型 |
-| 🧩 **Go SDK 与流式输出** | 原生 Go SDK 支持嵌入代理；完整的 SSE 流式 / 非流式响应控制与 Keep-Alive 支持 |
-| 🧠 **多模态与工具回调** | 无缝支持文本 + 图片文件解析识别，以及 AI Function Calling (工具调用) 能力 |
-| 🛡️ **安全与防御隔离** | 基于 API Key 鉴权、TLS、管理后台本地化隔离与上游请求伪装替换策略 |
-| 🗄️ **Redis 数据持久化** | 自动定时及在服务优雅停机时将 API 统计快照存入 Redis，确保服务重启或更新时前端面板监控数据 **零丢失** |
+| 🌐 **统一端点** | 一个 `http://localhost:8317` 处理所有服务商请求（Gemini、Claude、OpenAI、Codex、Qwen、iFlow、Vertex、Kiro、MiniMax、Grok 等） |
+| ⚖️ **智能负载均衡** | 跨多个 API Key 的轮询或填充优先调度策略 |
+| 🔄 **自动故障转移** | 配额耗尽或发生错误时自动切换到备用渠道 |
+| 🧠 **多模态支持** | 完整支持文本 + 图片输入、Function Calling（工具调用）和 SSE 流式响应 |
+| 🔗 **OpenAI 兼容** | 支持任何兼容 OpenAI Chat Completions 协议的上游服务 |
+
+### 📊 请求日志与监控（SQLite）
+
+| 特性 | 说明 |
+|:-----|:-----|
+| 📝 **完整请求捕获** | 每个 API 请求记录到 SQLite：时间戳、模型、Token（输入/输出/推理/缓存）、延迟、状态、来源渠道 |
+| 💬 **消息体存储** | 完整的请求/响应消息内容捕获（包括 SSE 流式重组），支持 100KB 智能截断 |
+| 🔍 **高级查询** | 按 API Key、模型、状态、时间范围过滤日志，高效分页（LIMIT/OFFSET） |
+| 📈 **分析聚合** | 预计算仪表盘：每日趋势、模型分布、每小时热力图、单 Key 统计 |
+| 🏥 **健康评分引擎** | 实时 0–100 健康评分，综合考虑成功率、延迟、活跃渠道和错误模式 |
+| 📡 **WebSocket 监控** | 通过 WebSocket 实时推送系统状态：CPU、内存、goroutines、网络 I/O、数据库大小 |
+| 🗄️ **No-CGO SQLite** | 使用 `modernc.org/sqlite` — 纯 Go 实现，无 CGO 依赖，易于交叉编译 |
+
+### 🔐 API Key 与权限管理
+
+| 特性 | 说明 |
+|:-----|:-----|
+| 🔑 **API Key CRUD** | 通过管理 API 创建、编辑、删除 API Key — 支持自定义名称、备注和独立启用/禁用开关 |
+| 📊 **单 Key 配额** | 为每个 Key 设置最大 Token / 请求配额，系统自动执行限制 |
+| ⏱️ **速率限制** | 单 Key 速率限制（每分钟/每小时请求数） |
+| 🔒 **Key 脱敏** | API Key 在 UI 和日志中始终脱敏显示（`sk-***xxx`） |
+| 🌍 **公开查询页面** | 终端用户可通过公开自助页面查询自己的用量统计和请求日志（无需登录） |
+
+### 🔗 服务商渠道管理
+
+| 特性 | 说明 |
+|:-----|:-----|
+| 📋 **多标签页配置** | 按服务商类型组织渠道管理：Gemini、Claude、Codex、Vertex、OpenAI 兼容、Ampcode |
+| 🏷️ **渠道命名** | 每个渠道支持自定义名称、备注、代理 URL、自定义 Headers 和模型别名映射 |
+| ⏱️ **延迟追踪** | 每渠道平均延迟（`latency_ms`）追踪，带可视化指标 |
+| 🔄 **启用/禁用** | 单独切换渠道开关，无需删除 |
+| 🚫 **模型排除** | 从渠道中排除特定模型（例如：在备用 Key 上屏蔽高价模型） |
+| 📊 **渠道统计** | 每渠道成功/失败次数和模型可用性展示在渠道卡片上 |
+
+### 🛡️ 安全与认证
+
+| 特性 | 说明 |
+|:-----|:-----|
+| 🔐 **OAuth 支持** | 原生 OAuth 流程，支持 Gemini、Claude、Codex、Qwen、iFlow（服务账户或浏览器方式） |
+| 🔒 **TLS 处理** | 可配置的上游通信 TLS 设置 |
+| 🏠 **面板隔离** | 管理面板访问由管理员密码独立控制 |
+| 🛡️ **请求伪装** | 上游请求自动剥离客户端标识 Headers，保护隐私 |
+
+### 🗄️ 数据持久化
+
+| 特性 | 说明 |
+|:-----|:-----|
+| 💾 **SQLite 存储** | 所有使用数据、请求日志和消息体存储在本地 SQLite 数据库 |
+| 🔄 **Redis 备份** | 可选 Redis 集成，定期快照和跨重启指标保留 |
+| 📦 **配置快照** | 导入/导出整个系统配置为 JSON，便于备份和迁移 |
+
+## 📸 管理面板预览
+
+**[codeProxy](https://github.com/kittors/codeProxy)** 仪表盘为你的 CliRelay 实例提供精美的现代化 Web UI：
+
+<p align="center">
+  <img src="docs/images/dashboard.png" width="100%" />
+</p>
+<p align="center"><em>仪表盘 — KPI 指标、健康评分、实时系统监控、渠道延迟排行</em></p>
+
+<p align="center">
+  <img src="docs/images/monitor.png" width="48%" />
+  <img src="docs/images/providers.png" width="48%" />
+</p>
+<p align="center"><em>监控中心（图表分析） | AI 供应商渠道管理</em></p>
+
+<p align="center">
+  <img src="docs/images/request-logs.png" width="100%" />
+</p>
+<p align="center"><em>请求日志 — 虚拟滚动、多条件过滤、Token 悬浮、错误详情弹窗</em></p>
+
+> 🔗 更多截图和功能详情请查看 [codeProxy README](https://github.com/kittors/codeProxy)
+
+## 🏗️ 支持的服务商
+
+<table>
+<tr>
+<td align="center"><strong>🟢 Google Gemini</strong><br/>OAuth + API Key</td>
+<td align="center"><strong>🟣 Anthropic Claude</strong><br/>OAuth + API Key</td>
+<td align="center"><strong>⚫ OpenAI Codex</strong><br/>OAuth</td>
+</tr>
+<tr>
+<td align="center"><strong>🔵 通义千问 Qwen</strong><br/>OAuth</td>
+<td align="center"><strong>🟡 iFlow (GLM)</strong><br/>OAuth</td>
+<td align="center"><strong>🟠 Vertex AI</strong><br/>API Key</td>
+</tr>
+<tr>
+<td align="center"><strong>🔴 Kimi</strong><br/>API Key</td>
+<td align="center"><strong>🟤 Kiro</strong><br/>API Key</td>
+<td align="center"><strong>🟣 MiniMax</strong><br/>API Key</td>
+</tr>
+<tr>
+<td align="center" colspan="3"><strong>🔗 任意 OpenAI 兼容上游</strong>（OpenRouter、Grok 等）</td>
+</tr>
+</table>
 
 ## 🚀 快速开始
 
@@ -82,12 +174,12 @@ cp config.example.yaml config.yaml
 docker compose up -d
 ```
 
-### 🗄️ 开启持久化（防数据丢失）
+### 🗄️ 开启数据持久化
 
-默认情况下 API 调用统计数据存活于内存中，重启即焚。如果你希望在重启或发版后保留看板监控数据：
+默认情况下，API 使用日志存储在 SQLite 中以实现持久化。如需额外备份：
 1. 准备一个可用的 Redis 数据库。
-2. 编辑 `config.yaml` 找到最上方，将 `redis` 块下的 `enable` 改为 `true`，并填入地址。
-配置完成后，无论怎么重新启动服务，它都将自动完成快照恢复！
+2. 编辑 `config.yaml`，将 `redis.enable` 设为 `true` 并填入 Redis 地址。
+配置完成后，CliRelay 每次启动都会自动完成快照恢复！
 
 ### 3️⃣ 配置工具
 
@@ -105,28 +197,9 @@ requires_openai_auth = true
 
 ## 🖥️ 管理面板
 
-**[codeProxy](https://github.com/kittors/codeProxy)** 前端为 CliRelay 提供了现代化的管理后台：
-
-- 📊 实时用量监控与统计
-- ⚙️ 可视化配置编辑
-- 🔐 OAuth 服务商管理
-- 📋 结构化日志查看
-
-<details>
-<summary>📸 前端面板截图</summary>
-
-<p align="center">
-  <img src="assets/codeproxy/iShot_2026-03-06_10.51.59.png" width="48%" />
-  <img src="assets/codeproxy/iShot_2026-03-06_10.52.09.png" width="48%" />
-</p>
-<p align="center">
-  <img src="assets/codeproxy/iShot_2026-03-06_10.52.33.png" width="48%" />
-  <img src="assets/codeproxy/iShot_2026-03-06_10.54.03.png" width="48%" />
-</p>
-</details>
+安装并运行 **[codeProxy](https://github.com/kittors/codeProxy)** 前端：
 
 ```bash
-# 克隆并启动管理面板
 git clone https://github.com/kittors/codeProxy.git
 cd codeProxy
 bun install
@@ -134,32 +207,19 @@ bun run dev
 # 访问 http://localhost:5173
 ```
 
-## 🏗️ 支持的服务商
-
-<table>
-<tr>
-<td align="center"><strong>🟢 Google Gemini</strong><br/>OAuth + API Key</td>
-<td align="center"><strong>🟣 Anthropic Claude</strong><br/>OAuth + API Key</td>
-<td align="center"><strong>⚫ OpenAI Codex</strong><br/>OAuth</td>
-</tr>
-<tr>
-<td align="center"><strong>🔵 通义千问 Qwen</strong><br/>OAuth</td>
-<td align="center"><strong>🟡 iFlow (GLM)</strong><br/>OAuth</td>
-<td align="center"><strong>🟠 Vertex AI</strong><br/>API Key</td>
-</tr>
-<tr>
-<td align="center" colspan="3"><strong>🔗 任意 OpenAI 兼容上游</strong>（OpenRouter 等）</td>
-</tr>
-</table>
-
 ## 📐 项目结构
 
 ```
 CliRelay/
 ├── cmd/              # 入口
 ├── internal/         # 核心代理逻辑、翻译器、处理器
+│   ├── handler/      # HTTP 请求处理器（聊天、模型、管理）
+│   ├── translator/   # 服务商特定的请求/响应翻译器
+│   ├── scheduler/    # 负载均衡与渠道选择
+│   ├── database/     # SQLite 操作与迁移
+│   └── monitor/      # 健康检查与系统状态
 ├── sdk/              # 可复用的 Go SDK
-├── auths/            # 身份验证流程
+├── auths/            # OAuth 身份验证流程
 ├── examples/         # 自定义 Provider 示例
 ├── docs/             # SDK 与 API 文档
 ├── config.yaml       # 运行时配置
@@ -171,12 +231,12 @@ CliRelay/
 | 文档 | 说明 |
 |:-----|:-----|
 | [新手入门](https://help.router-for.me/cn/) | 完整的安装与配置指南 |
-| [管理 API](https://help.router-for.me/cn/management/api) | 管理端点 REST API 参考 |
-| [Amp CLI 指南](https://help.router-for.me/cn/agent-client/amp-cli.html) | 集成 Amp CLI 和 IDE 扩展 |
-| [SDK 使用](docs/sdk-usage_CN.md) | 在 Go 应用中嵌入代理 |
-| [SDK 进阶](docs/sdk-advanced_CN.md) | 执行器与翻译器深入解析 |
-| [SDK 认证](docs/sdk-access_CN.md) | SDK 认证上下文 |
-| [SDK Watcher](docs/sdk-watcher_CN.md) | 凭据加载与热重载 |
+| [管理 API](https://help.router-for.me/management/api) | 管理端点 REST API 参考 |
+| [Amp CLI 指南](https://help.router-for.me/agent-client/amp-cli.html) | 集成 Amp CLI 和 IDE 扩展 |
+| [SDK 使用](docs/sdk-usage.md) | 在 Go 应用中嵌入代理 |
+| [SDK 进阶](docs/sdk-advanced.md) | 执行器与翻译器深入解析 |
+| [SDK 认证](docs/sdk-access.md) | SDK 认证上下文 |
+| [SDK Watcher](docs/sdk-watcher.md) | 凭据加载与热重载 |
 
 ## 🤝 贡献
 
@@ -204,10 +264,9 @@ git push origin feature/amazing-feature
 
 ## 🙏 特别鸣谢
 
-本项目是基于优秀的开源项目 **[router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)** 核心逻辑深度二次开发（魔改）而来。
+本项目是基于优秀的开源项目 **[router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)** 核心逻辑深度开发而来。
 在此，我们想要对原上游项目 **CLIProxyAPI** 以及全体贡献者表达最诚挚的感谢！
 
-正是由于上游构建的坚实且极具创新的代理分发底座，我们才能站在巨人的肩膀上，衍生出这些独特的高级（如 API Key 追踪管控）管理功能，并重构出全新的前端管理大屏。
+正是由于上游构建的坚实且极具创新的代理分发底座，我们才能站在巨人的肩膀上，衍生出独特的高级管理功能（如 API Key 追踪管控、完整的 SQLite 请求日志、实时系统监控），并完全重构了前端管理面板。
 
 饮水思源，向开源精神致敬！❤️
-
