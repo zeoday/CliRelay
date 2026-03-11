@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -132,6 +133,7 @@ func InitDB(dbPath string) error {
 		return nil // already initialised
 	}
 
+	log.Debugf("usage: opening SQLite database at %s", dbPath)
 	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return fmt.Errorf("usage: open sqlite: %w", err)
@@ -140,6 +142,16 @@ func InitDB(dbPath string) error {
 	db.SetMaxOpenConns(1) // SQLite performs best with a single writer
 	db.SetMaxIdleConns(1)
 
+	// Verify connectivity with a timeout to avoid hanging on WAL recovery
+	log.Debugf("usage: pinging database to verify connectivity")
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer pingCancel()
+	if err := db.PingContext(pingCtx); err != nil {
+		_ = db.Close()
+		return fmt.Errorf("usage: ping sqlite: %w", err)
+	}
+
+	log.Debugf("usage: creating tables")
 	if _, err := db.Exec(createTableSQL); err != nil {
 		_ = db.Close()
 		return fmt.Errorf("usage: create table: %w", err)
@@ -147,8 +159,11 @@ func InitDB(dbPath string) error {
 
 	usageDB = db
 	usageDBPath = dbPath
+	log.Debugf("usage: running content column migration")
 	migrateContentColumns(db)
+	log.Debugf("usage: running cost column migration")
 	migrateCostColumn(db)
+	log.Debugf("usage: initializing pricing table")
 	initPricingTable()
 	log.Infof("usage: SQLite database initialised at %s", dbPath)
 	return nil
