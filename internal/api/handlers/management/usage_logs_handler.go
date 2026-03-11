@@ -259,3 +259,32 @@ func (h *Handler) GetPublicUsageChartData(c *gin.Context) {
 		"stats":              stats,
 	})
 }
+
+// GetPublicLogContent returns the stored request/response content for a single log entry,
+// but only if it belongs to the specified API key. This is a public endpoint.
+func (h *Handler) GetPublicLogContent(c *gin.Context) {
+	apiKey := strings.TrimSpace(c.Query("api_key"))
+	if apiKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "api_key parameter is required"})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(strings.TrimSpace(idStr), 10, 64)
+	if err != nil || id < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid log id"})
+		return
+	}
+
+	result, err := usage.QueryLogContentForKey(id, apiKey)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "log entry not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}

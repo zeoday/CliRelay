@@ -525,6 +525,24 @@ func QueryLogContent(id int64) (LogContentResult, error) {
 	return result, nil
 }
 
+// QueryLogContentForKey retrieves log content for a single entry, but only if it belongs to the given API key.
+// This is used by the public endpoint to ensure users can only access their own logs.
+func QueryLogContentForKey(id int64, apiKey string) (LogContentResult, error) {
+	db := getDB()
+	if db == nil {
+		return LogContentResult{}, fmt.Errorf("usage: database not initialised")
+	}
+
+	var result LogContentResult
+	err := db.QueryRow(
+		"SELECT id, model, input_content, output_content FROM request_logs WHERE id = ? AND api_key = ?", id, apiKey,
+	).Scan(&result.ID, &result.Model, &result.InputContent, &result.OutputContent)
+	if err != nil {
+		return LogContentResult{}, fmt.Errorf("usage: query log content: %w", err)
+	}
+	return result, nil
+}
+
 // DailySeriesPoint holds one day of aggregated usage data.
 type DailySeriesPoint struct {
 	Date         string `json:"date"`
