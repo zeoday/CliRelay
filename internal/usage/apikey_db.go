@@ -10,6 +10,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
 )
 
 // APIKeyRow mirrors config.APIKeyEntry and is used for SQLite persistence.
@@ -111,11 +112,7 @@ func MigrateAPIKeysFromConfig(cfg *config.Config, configFilePath string) int {
 		cfg.APIKeys = nil
 		cfg.APIKeyEntries = nil
 		if needsClean && configFilePath != "" {
-			if err := config.SaveConfigPreserveComments(configFilePath, cfg); err != nil {
-				log.Warnf("usage: failed to clean stale api-keys from config.yaml: %v", err)
-			} else {
-				log.Infof("usage: cleaned stale api-keys/api-key-entries from config.yaml")
-			}
+			cleanAPIKeysFromYAML(configFilePath)
 		}
 		return 0
 	}
@@ -216,7 +213,7 @@ func MigrateAPIKeysFromConfig(cfg *config.Config, configFilePath string) int {
 	cfg.APIKeys = nil
 	cfg.APIKeyEntries = nil
 
-	// Auto-persist the cleaned config to remove stale api-keys/api-key-entries from YAML
+	// Auto-clean the config file to remove stale api-keys/api-key-entries
 	if configFilePath != "" {
 		// Backup first
 		backupPath := configFilePath + ".pre-sqlite-migration"
@@ -227,12 +224,7 @@ func MigrateAPIKeysFromConfig(cfg *config.Config, configFilePath string) int {
 				log.Infof("usage: backed up config.yaml to %s", backupPath)
 			}
 		}
-		// Re-save config without api-keys/api-key-entries
-		if err := config.SaveConfigPreserveComments(configFilePath, cfg); err != nil {
-			log.Warnf("usage: failed to persist cleaned config: %v", err)
-		} else {
-			log.Infof("usage: cleaned api-keys/api-key-entries from config.yaml")
-		}
+		cleanAPIKeysFromYAML(configFilePath)
 	}
 
 	return imported
@@ -442,4 +434,64 @@ func scanSingleAPIKeyRow(row *sql.Row) *APIKeyRow {
 		_ = json.Unmarshal([]byte(modelsJSON), &r.AllowedModels)
 	}
 	return &r
+}
+
+// cleanAPIKeysFromYAML directly removes api-keys and api-key-entries from the YAML file
+// by manipulating the YAML node tree. This is more reliable than SaveConfigPreserveComments
+// which uses a merge that doesn't delete existing keys.
+func cleanAPIKeysFromYAML(configFilePath string) {
+	data, err := os.ReadFile(configFilePath)
+	if err != nil {
+		log.Warnf("usage: failed to read config for cleanup: %v", err)
+		return
+	}
+
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		log.Warnf("usage: failed to parse config YAML: %v", err)
+		return
+	}
+	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 {
+		return
+	}
+	mapNode := root.Content[0]
+	if mapNode == nil || mapNode.Kind != yaml.MappingNode {
+		return
+	}
+
+	// Remove api-keys and api-key-entries from the root mapping
+	keysToRemove := map[string]bool{"api-keys": true, "api-key-entries": true}
+	filtered := make([]*yaml.Node, 0, len(mapNode.Content))
+	removed := 0
+	for i := 0; i+1 < len(mapNode.Content); i += 2 {
+		keyNode := mapNode.Content[i]
+		if keyNode != nil && keysToRemove[keyNode.Value] {
+			removed++
+			continue
+		}
+		filtered = append(filtered, mapNode.Content[i], mapNode.Content[i+1])
+	}
+
+	if removed == 0 {
+		return // nothing to clean
+	}
+
+	mapNode.Content = filtered
+
+	// Write back
+	f, err := os.Create(configFilePath)
+	if err != nil {
+		log.Warnf("usage: failed to create config for cleanup: %v", err)
+		return
+	}
+	defer f.Close()
+
+	enc := yaml.NewEncoder(f)
+	enc.SetIndent(2)
+	if err := enc.Encode(&root); err != nil {
+		log.Warnf("usage: failed to write cleaned config: %v", err)
+		return
+	}
+	_ = enc.Close()
+	log.Infof("usage: removed api-keys and api-key-entries from config.yaml (%d sections removed)", removed)
 }
